@@ -1,3 +1,4 @@
+from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.views import APIView
@@ -31,6 +32,47 @@ class ProductCreateAPIView(APIView):
             # При сохранении передаём текущего пользователя как manager
             serializer.save(manager=request.user)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ProductUpdateAPIView(APIView):
+    """
+    Эндпоинт для обновления существующего товара.
+    Ожидает PUT-запрос с данными:
+    {
+        "marketplace": "OZON" или "Wildberries",
+        "details": {
+            "название": "Товар 1",
+            "цена": "100",
+            "описание": "Описание товара"
+        }
+    }
+    Поле manager не передаётся в запросе, оно автоматически устанавливается как текущий пользователь.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request, pk, *args, **kwargs):
+        # Получаем товар, принадлежащий текущему пользователю
+        product = get_object_or_404(Product, pk=pk, manager=request.user)
+
+        serializer = ProductSerializer(product, data=request.data)
+        if serializer.is_valid():
+            # При сохранении передаём текущего пользователя как manager
+            serializer.save(manager=request.user)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request, pk, *args, **kwargs):
+        # Частичное обновление товара
+        product = get_object_or_404(Product, pk=pk, manager=request.user)
+
+        serializer = ProductSerializer(product, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save(manager=request.user)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -80,3 +122,18 @@ class SellerListAPIView(APIView):
         sellers = Seller.objects.filter(manager=request.user)
         serializer = SellerSerializer(sellers, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ProductDeleteAPIView(APIView):
+    """
+    Эндпоинт для удаления товара.
+    Метод DELETE принимает идентификатор товара (pk) в URL и удаляет товар, если он принадлежит текущему пользователю.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk, *args, **kwargs):
+        # Получаем товар, принадлежащий текущему пользователю
+        product = get_object_or_404(Product, pk=pk, manager=request.user)
+        product.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
